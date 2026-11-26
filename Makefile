@@ -21,4 +21,12 @@ ifeq ($(SIDELOADING),1)
 $(TWEAK_NAME)_FILES += Source/Sideloading.x
 endif
 
+ifeq ($(VOCAL_REMOVAL),true)
+$(TWEAK_NAME)_FILES += $(wildcard Source/VocalRemoval/*.swift)
+$(TWEAK_NAME)_SWIFT_BRIDGING_HEADER = Source/VocalRemoval/InstrumentalStream.h
+$(TWEAK_NAME)_FRAMEWORKS += Accelerate CoreML CoreMedia
+else
+$(TWEAK_NAME)_FILES := $(filter-out Source/VocalRemoval/%, $($(TWEAK_NAME)_FILES))
+endif
+
 include $(THEOS_MAKE_PATH)/tweak.mk
