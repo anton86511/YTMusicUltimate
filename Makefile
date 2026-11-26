@@ -25,6 +25,7 @@ ifeq ($(VOCAL_REMOVAL),true)
 $(TWEAK_NAME)_FILES += $(wildcard Source/VocalRemoval/*.swift)
 $(TWEAK_NAME)_SWIFT_BRIDGING_HEADER = Source/VocalRemoval/InstrumentalStream.h
 $(TWEAK_NAME)_FRAMEWORKS += Accelerate CoreML CoreMedia
+$(TWEAK_NAME)_CFLAGS += -ISource/Utils/MobileFFmpeg
 else
 $(TWEAK_NAME)_FILES := $(filter-out Source/VocalRemoval/%, $($(TWEAK_NAME)_FILES))
 endif
