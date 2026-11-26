@@ -13,7 +13,7 @@ final class LiveInstrumentalWorker {
     private var activityEpoch: UInt = 0
     private var activityObservers: [NSObjectProtocol] = []
 
-    func start(url: URL, computeMode: InstrumentalComputeMode, completion: @escaping (Bool) -> Void) {
+    func start(url: URL, computeMode: InstrumentalComputeMode = .cpuAndGPU, completion: @escaping (Bool) -> Void) {
         observeAppActivity()
         queue.async {
             do {

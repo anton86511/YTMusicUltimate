@@ -1,3 +1,4 @@
+#import <AVFoundation/AVFoundation.h>
 #import <CoreMedia/CoreMedia.h>
 #import "InstrumentalStream.h"
 #import "PCMOutput.h"
@@ -5,6 +6,8 @@
 
 @interface HAMSBARAudioTrackRenderer : NSObject
 @end
+
+static _Thread_local const void *hamPCMSource;
 
 // HAM's sample buffer renderer can own its audio output inside AVFoundation.
 // Copy linear PCM before processing so upstream shared buffers stay intact.
@@ -56,15 +59,26 @@ static CMSampleBufferRef CopyPlaybackPCM(CMSampleBufferRef sample, const void *s
 
 %hook HAMSBARAudioTrackRenderer
 
-- (void)enqueueSampleBuffer:(CMSampleBufferRef)sample {
-    CMSampleBufferRef copy = CopyPlaybackPCM(sample, (__bridge const void *)self);
-    %orig(copy ?: sample);
-    if (copy) CFRelease(copy);
+- (void)enqueueSampleBuffer:(id)sample {
+    const void *previous = hamPCMSource;
+    hamPCMSource = (__bridge const void *)self;
+    %orig;
+    hamPCMSource = previous;
 }
 
 - (void)flush {
     %orig;
     YTMUInstrumentalReset();
+}
+
+%end
+
+%hook AVSampleBufferAudioRenderer
+
+- (void)enqueueSampleBuffer:(CMSampleBufferRef)sample {
+    CMSampleBufferRef copy = hamPCMSource ? CopyPlaybackPCM(sample, hamPCMSource) : NULL;
+    %orig(copy ?: sample);
+    if (copy) CFRelease(copy);
 }
 
 %end
