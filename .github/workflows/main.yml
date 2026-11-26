@@ -14,6 +14,12 @@ on:
         required: true
         type: string
 
+      vocal_removal:
+        description: "Build the AI vocal removal edition (iOS 16+)"
+        default: true
+        required: true
+        type: boolean
+
       bundle_id:
         description: "BundleID (Optional)"
         default: "com.google.ios.youtubemusic"
@@ -44,8 +50,10 @@ jobs:
           exclude_inputs: bundle_id,display_name
 
       - name: Validate IPA URL
+        env:
+          IPA_URL: ${{ inputs.ipa_url }}
         run: |
-          curl -L -r 0-1023 -o sample.part "${{ inputs.ipa_url }}" > /dev/null 2>&1
+          curl --fail --location --retry 3 -r 0-1023 --output sample.part "$IPA_URL" > /dev/null 2>&1
           
           file_type=$(file --mime-type -b sample.part)
 
@@ -94,22 +102,56 @@ jobs:
         run: pipx install --force https://github.com/asdfzxcvbn/pyzule-rw/archive/main.zip
 
       - name: Download YouTube Music
-        run: wget "${{ inputs.ipa_url }}" --no-verbose -O ytm.ipa
+        env:
+          IPA_URL: ${{ inputs.ipa_url }}
+        run: |
+          curl --fail --location --retry 3 --proto '=https' --proto-redir '=https' --silent --show-error --output ytm.ipa "$IPA_URL"
+          unzip -tq ytm.ipa
+
+      - name: Stage the verified Inst HQ 4 model
+        if: inputs.vocal_removal
+        run: |
+          curl --fail --location --retry 3 --silent --show-error https://github.com/anton86511/EeveeSpotifyReincarnated/releases/download/v7.5.0-spotify-9.2.2-hq4-cpu-gpu/EeveeSpotify-9.2.2-HQ4-CPU-GPU.ipa --output hq4-reference.ipa
+          python3 main/Source/VocalRemoval/bundle-hq4.py hq4-reference.ipa InstHQ4.mlmodelc
 
       - name: Build Tweak for Sideloading
         run: |
           cd main
-          make clean package DEBUG=0 FINALPACKAGE=1 SIDELOADING=1
+          make clean package DEBUG=0 FINALPACKAGE=1 SIDELOADING=1 VOCAL_REMOVAL="${{ inputs.vocal_removal }}" TARGET=iphone:clang:latest:13.0
           mv packages/*.deb ../ytmult.deb
 
       - name: Inject tweak into provided IPA
-        run: cyan -i ytm.ipa -o YTMusicUltimate.ipa -uwsf ytmult.deb -n "${{ inputs.display_name }}" -b ${{ inputs.bundle_id }} 
+        env:
+          DISPLAY_NAME: ${{ inputs.display_name }}
+          BUNDLE_ID: ${{ inputs.bundle_id }}
+        run: |
+          args=(-u -w -s -n "$DISPLAY_NAME" -b "$BUNDLE_ID")
+          if [[ "${{ inputs.vocal_removal }}" == true ]]; then
+            mkdir -p Payload
+            target=Payload/YouTubeMusic.app
+            cyan -i ytm.ipa -o "$target" "${args[@]}" -m 16.0 -f ytmult.deb InstHQ4.mlmodelc
+            binary="$target/$(/usr/libexec/PlistBuddy -c 'Print CFBundleExecutable' "$target/Info.plist")"
+            ldid -e "$binary" > entitlements.plist
+            python3 main/Source/VocalRemoval/bind-playback-audio.py "$binary"
+            if [[ -s entitlements.plist ]]; then
+              ldid -Sentitlements.plist "$binary"
+            else
+              ldid -S "$binary"
+            fi
+            zip -qry YTMusicUltimate-AI-Vocal-Removal.ipa Payload
+            unzip -tq YTMusicUltimate-AI-Vocal-Removal.ipa
+          else
+            cyan -i ytm.ipa -o YTMusicUltimate.ipa "${args[@]}" -f ytmult.deb
+          fi
 
       - name: Create Release
         uses: softprops/action-gh-release@v2.5.0
         with:
           name: YTMusicUltimate (${{ github.run_number }})
-          files: YTMusicUltimate.ipa
+          tag_name: ytmu-${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          files: YTMusicUltimate*.ipa
+          fail_on_unmatched_files: true
           draft: true
 
       - name: Output Release URL
