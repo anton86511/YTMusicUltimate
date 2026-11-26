@@ -77,6 +77,7 @@ static void CopyAttachments(CMSampleBufferRef original, CMSampleBufferRef output
     CMAudioFormatDescriptionRef pcmDescription;
     AVCodecContext *decoder;
     AVFrame *decoded;
+    NSMutableData *pcmStorage;
     SwrContext *resampler;
     int inputRate;
     int inputFormat;
@@ -189,11 +190,11 @@ static void CopyAttachments(CMSampleBufferRef original, CMSampleBufferRef output
 
     const AudioStreamPacketDescription *packets = NULL;
     size_t packetBytes = 0, totalSize = CMBlockBufferGetDataLength(data);
-    CMSampleBufferGetAudioStreamPacketDescriptionsPtr(sample, &packetBytes, &packets);
+    CMSampleBufferGetAudioStreamPacketDescriptionsPtr(sample, &packets, &packetBytes);
     if (totalSize == 0 || totalSize > MaxPacketBytes || (packets && packetBytes / sizeof(*packets) < (size_t)count)) return NULL;
 
-    NSMutableData *pcm = [NSMutableData dataWithLength:MaxPCMFrames * pcmFormat.mBytesPerFrame];
-    float *samples = pcm.mutableBytes;
+    if (!pcmStorage) pcmStorage = [NSMutableData dataWithLength:MaxPCMFrames * pcmFormat.mBytesPerFrame];
+    float *samples = pcmStorage.mutableBytes;
     size_t offset = 0;
     int processed = 0;
     for (CMItemCount i = 0; i < count; ++i) {
