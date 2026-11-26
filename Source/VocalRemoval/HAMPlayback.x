@@ -1,5 +1,7 @@
 #import <AVFoundation/AVFoundation.h>
 #import <CoreMedia/CoreMedia.h>
+#import <objc/runtime.h>
+#import "PlaybackDecoder.h"
 #import "InstrumentalStream.h"
 #import "PCMOutput.h"
 #import "../Headers/YTPlayerViewController.h"
@@ -7,7 +9,15 @@
 @interface HAMSBARAudioTrackRenderer : NSObject
 @end
 
-static _Thread_local const void *hamPCMSource;
+static _Thread_local BOOL inMusicRenderer;
+static char decoderKey;
+
+static void CopyEnqueue(id renderer, CMSampleBufferRef sample, IMP original) {
+    BOOL wasMusicRenderer = inMusicRenderer;
+    inMusicRenderer = NO;
+    ((void (*)(id, SEL, CMSampleBufferRef))original)(renderer, @selector(enqueueSampleBuffer:), sample);
+    inMusicRenderer = wasMusicRenderer;
+}
 
 // HAM's sample buffer renderer can own its audio output inside AVFoundation.
 // Copy linear PCM before processing so upstream shared buffers stay intact.
@@ -38,6 +48,7 @@ static CMSampleBufferRef CopyPlaybackPCM(CMSampleBufferRef sample, const void *s
     if (retained) CFRelease(retained);
 
     CMBlockBufferRef copyData = NULL;
+    if (result == noErr) result = CMSampleBufferSetDataReady(copy);
     if (result == noErr) result = CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(copy,
         NULL, &storage.list, sizeof(storage), NULL, NULL, 0, &copyData);
     if (result == noErr) {
@@ -49,7 +60,6 @@ static CMSampleBufferRef CopyPlaybackPCM(CMSampleBufferRef sample, const void *s
                 CFRelease(attachments);
             }
         }
-        result = CMSampleBufferSetDataReady(copy);
     }
     if (copyData) CFRelease(copyData);
     if (result == noErr) return copy;
@@ -57,28 +67,68 @@ static CMSampleBufferRef CopyPlaybackPCM(CMSampleBufferRef sample, const void *s
     return NULL;
 }
 
+static CMSampleBufferRef CopyProcessedSample(id renderer, CMSampleBufferRef sample) {
+    if (!inMusicRenderer || !YTMUInstrumentalIsEnabled() || !sample || !CMSampleBufferDataIsReady(sample)) return NULL;
+    const void *source = (__bridge const void *)renderer;
+    CMFormatDescriptionRef description = CMSampleBufferGetFormatDescription(sample);
+    if (!description || CMFormatDescriptionGetMediaType(description) != kCMMediaType_Audio) return NULL;
+    const AudioStreamBasicDescription *format = CMAudioFormatDescriptionGetStreamBasicDescription(description);
+    if (!format) return NULL;
+    CMSampleBufferRef result = NULL;
+    if (format->mFormatID == kAudioFormatLinearPCM) {
+        result = CopyPlaybackPCM(sample, source);
+    } else {
+        YTMUPlaybackDecoder *decoder = objc_getAssociatedObject(renderer, &decoderKey);
+        if (!decoder) {
+            decoder = [YTMUPlaybackDecoder new];
+            objc_setAssociatedObject(renderer, &decoderKey, decoder, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+        result = [decoder copyPCMFromSample:sample source:source];
+    }
+    if (!result) YTMUInstrumentalReportUnsupported();
+    return result;
+}
+
+static void InstallRendererHook(id renderer) {
+    Class cls = object_getClass(renderer);
+    if (!cls) return;
+    static char installedKey;
+    if (objc_getAssociatedObject(cls, &installedKey)) return;
+    @synchronized (cls) {
+        if (objc_getAssociatedObject(cls, &installedKey)) return;
+        SEL selector = @selector(enqueueSampleBuffer:);
+        Method method = class_getInstanceMethod(cls, selector);
+        if (!method) return;
+        IMP original = method_getImplementation(method);
+        IMP replacement = imp_implementationWithBlock(^(id target, CMSampleBufferRef sample) {
+            CMSampleBufferRef copy = CopyProcessedSample(target, sample);
+            CopyEnqueue(target, copy ?: sample, original);
+            if (copy) CFRelease(copy);
+        });
+        class_replaceMethod(cls, selector, replacement, method_getTypeEncoding(method));
+        objc_setAssociatedObject(cls, &installedKey, @YES, OBJC_ASSOCIATION_RETAIN);
+    }
+}
+
 %hook HAMSBARAudioTrackRenderer
 
 - (void)enqueueSampleBuffer:(id)sample {
-    const void *previous = hamPCMSource;
-    hamPCMSource = (__bridge const void *)self;
+    BOOL previous = inMusicRenderer;
+    inMusicRenderer = YES;
+    if (YTMUInstrumentalIsEnabled()) {
+        Ivar rendererIvar = class_getInstanceVariable(object_getClass(self), "_renderer");
+        if (rendererIvar) InstallRendererHook(object_getIvar(self, rendererIvar));
+    }
     %orig;
-    hamPCMSource = previous;
+    inMusicRenderer = previous;
 }
 
 - (void)flush {
-    %orig;
+    Ivar rendererIvar = class_getInstanceVariable(object_getClass(self), "_renderer");
+    id renderer = rendererIvar ? object_getIvar(self, rendererIvar) : nil;
+    if (renderer) objc_setAssociatedObject(renderer, &decoderKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     YTMUInstrumentalReset();
-}
-
-%end
-
-%hook AVSampleBufferAudioRenderer
-
-- (void)enqueueSampleBuffer:(CMSampleBufferRef)sample {
-    CMSampleBufferRef copy = hamPCMSource ? CopyPlaybackPCM(sample, hamPCMSource) : NULL;
-    %orig(copy ?: sample);
-    if (copy) CFRelease(copy);
+    %orig;
 }
 
 %end

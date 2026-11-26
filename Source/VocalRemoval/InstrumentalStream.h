@@ -21,3 +21,4 @@ uint32_t YTMUInstrumentalWrite(uint32_t generation, const YTMUStereoFrame *input
                                  uint32_t count, uint64_t position);
 uint32_t YTMUInstrumentalStatus(void);
 bool YTMUInstrumentalIsEnabled(void);
+void YTMUInstrumentalReportUnsupported(void);

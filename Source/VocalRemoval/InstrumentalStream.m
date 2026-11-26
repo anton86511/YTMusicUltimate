@@ -206,3 +206,9 @@ uint32_t YTMUInstrumentalStatus(void) {
 bool YTMUInstrumentalIsEnabled(void) {
     return atomic_load_explicit(&enabled, memory_order_acquire);
 }
+
+void YTMUInstrumentalReportUnsupported(void) {
+    if (YTMUInstrumentalIsEnabled() && !YTMUInstrumentalCurrentStream().generation) {
+        atomic_store_explicit(&status, 4, memory_order_relaxed);
+    }
+}
