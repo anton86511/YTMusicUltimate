@@ -119,3 +119,19 @@
 "ALL_DOWNLOADS" = "所有下載的音訊"; //keep it lowercase
 "DELETE" = "刪除";
 "RENAME" = "重新命名";
+
+"VOCAL_TITLE" = "AI 去人聲";
+"VOCAL_OFF" = "已關閉";
+"VOCAL_LOADING" = "正在載入人聲分離模型";
+"VOCAL_BUFFERING" = "等待音訊或填充人聲分離緩衝區（約 8 秒）";
+"VOCAL_ACTIVE" = "正在分離人聲";
+"VOCAL_ORIGINAL" = "模型處理中，暫時播放原音";
+"VOCAL_UNAVAILABLE" = "目前的音訊格式不支援";
+"VOCAL_NO_STREAM" = "等待支援的音訊串流";
+"VOCAL_MODEL_MISSING" = "這個版本缺少 Inst HQ 4 模型。";
+"VOCAL_MODEL_ERROR" = "無法啟動 Inst HQ 4 模型。";
+"VOCAL_TURN_ON" = "開啟 AI 去人聲";
+"VOCAL_TURN_OFF" = "關閉 AI 去人聲";
+"VOCAL_MORE" = "播放選項";
+"VOCAL_CANCEL" = "取消";
+"VOCAL_OK" = "確定";
