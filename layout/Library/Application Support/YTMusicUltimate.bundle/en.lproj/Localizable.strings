@@ -119,3 +119,19 @@
 "ALL_DOWNLOADS" = "all download audios"; //keep it lowercase
 "DELETE" = "Delete";
 "RENAME" = "Rename";
+
+"VOCAL_TITLE" = "AI Vocal Removal";
+"VOCAL_OFF" = "Off";
+"VOCAL_LOADING" = "Loading the separation model";
+"VOCAL_BUFFERING" = "Waiting for audio or filling the separation buffer (about 8 seconds)";
+"VOCAL_ACTIVE" = "Separating vocals";
+"VOCAL_ORIGINAL" = "Playing original audio while separation catches up";
+"VOCAL_UNAVAILABLE" = "This audio format is not supported";
+"VOCAL_NO_STREAM" = "Waiting for a compatible audio stream";
+"VOCAL_MODEL_MISSING" = "The Inst HQ 4 model is missing from this installation.";
+"VOCAL_MODEL_ERROR" = "Could not start the Inst HQ 4 model.";
+"VOCAL_TURN_ON" = "Turn on AI Vocal Removal";
+"VOCAL_TURN_OFF" = "Turn off AI Vocal Removal";
+"VOCAL_MORE" = "Playback options";
+"VOCAL_CANCEL" = "Cancel";
+"VOCAL_OK" = "OK";
